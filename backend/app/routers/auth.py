@@ -57,11 +57,3 @@ async def logout():
     Клиент должен удалить токен.
     """
     return {"message": "Вы успешно вышли из системы."}
-
-
-@router.get("/me", response_model=schemas.User)
-async def read_users_me(current_user: User = Depends(get_current_user)):
-    """
-    Получение информации о текущем аутентифицированном пользователе.
-    """
-    return current_user

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import init_db, engine, get_session
 from app.routers import root as root_router
 from app.routers import auth as auth_router
+from app.routers import users as users_router
 from app.security import create_access_token
 
 
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
 
     app.include_router(root_router.router)
     app.include_router(auth_router.router)
+    app.include_router(users_router.router)
 
     token_app = create_token_app()
     app.mount("/token", token_app)  # /token не проходит через middleware основного app
