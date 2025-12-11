@@ -179,6 +179,10 @@ class SessionExercise(Base):
     session_sets = relationship("SessionSet", back_populates="session_exercise", cascade="all, delete-orphan",
                                 lazy="selectin")
 
+    # Relationship to the Exercise model based on plan_exercise_name
+    exercise = relationship("Exercise", primaryjoin="SessionExercise.plan_exercise_name == Exercise.name",
+                            foreign_keys=[plan_exercise_name], viewonly=True, lazy="joined")
+
     def __repr__(self):
         return f"<SessionExercise id={self.id} name={self.plan_exercise_name!r}>"
 
