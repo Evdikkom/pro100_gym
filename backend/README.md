@@ -109,3 +109,42 @@ Authorization: Bearer <ваш_access_token>
       - **Действие:** Завершает всю тренировочную сессию.
     - `POST /sessions/{session_id}/cancel`
       - **Действие:** Отменяет и полностью удаляет текущую сессию.
+
+### 3.5. Статистика пользователя
+
+Этот эндпоинт предоставляет агрегированную статистику по завершенным тренировкам пользователя.
+
+- `GET /statistics/me`
+  - **Действие:** Возвращает сводку по тренировкам, персональные рекорды, объем по группам мышц и данные для графиков прогресса.
+  - **Параметры запроса (Query Parameters):**
+    - `period: str` (Необязательный): Фильтрует статистику по времени. Допустимые значения: `all_time` (по умолчанию), `last_month`, `last_week`.
+  - **Пример ответа:** (будет соответствовать `StatisticsResponse` схеме)
+    ```json
+    {
+      "summary": {
+        "total_workouts": 25,
+        "total_duration_minutes": 1500,
+        "total_volume_kg": 125000.5,
+        "total_sets": 750,
+        "total_reps": 7500,
+        "personal_records": [
+          {
+            "exercise_name": "Жим лежа",
+            "max_weight_kg": 100.0,
+            "reps": 5,
+            "date": "2025-12-10T10:00:00Z"
+          }
+        ]
+      },
+      "volume_by_muscle_group": [
+        { "muscle_group": "Грудь", "volume_kg": 30000.0 },
+        { "muscle_group": "Спина", "volume_kg": 28000.0 }
+      ],
+      "progress_charts": {
+        "overall_volume": [
+          { "date": "2025-11-01", "value_kg": 10000.0 },
+          { "date": "2025-12-01", "value_kg": 12000.0 }
+        ]
+      }
+    }
+    ```
