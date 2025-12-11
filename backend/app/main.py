@@ -22,6 +22,10 @@ from app.routers import statistics as statistics_router
 from app.security import create_access_token
 
 
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
+
+
 def create_token_app() -> FastAPI:
     """Приложение только для /token — без middleware и форматирования."""
     token_app = FastAPI()
@@ -84,6 +88,10 @@ def create_app() -> FastAPI:
             logger.info("DB initialized / tables created (if not exist).")
         except Exception as e:
             logger.exception("Error during DB init: %s", e)
+
+        logger.info("Startup: инициализация кэша...")
+        FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+        logger.info("Cache initialized.")
 
     @app.on_event("shutdown")
     async def on_shutdown():
