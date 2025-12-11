@@ -17,6 +17,7 @@ from app.routers import users as users_router
 from app.routers import preferences as preferences_router
 from app.routers import workouts as workouts_router
 from app.routers import options as options_router
+from app.routers import sessions as sessions_router
 from app.security import create_access_token
 
 
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(preferences_router.router)
     app.include_router(workouts_router.router)
     app.include_router(options_router.router)
+    app.include_router(sessions_router.router)  # Include new sessions router
 
     token_app = create_token_app()
     app.mount("/token", token_app)  # /token не проходит через middleware основного app
