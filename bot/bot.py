@@ -1,14 +1,21 @@
+# bot.py
 from aiogram import Bot, Dispatcher
-from aiogram.client.bot import DefaultBotProperties
-from handlers import router
+from aiogram.client.default import DefaultBotProperties
 from config import BOT_TOKEN
+from handlers import router as main_router
+from fsm_onboarding import router as onboarding_router
+from training_manager import router as training_router
 
-# Создаём объект бота
+# Инициализация бота
 bot = Bot(
     token=BOT_TOKEN,
     default=DefaultBotProperties(parse_mode="HTML")
 )
 
-# Создаём диспетчер и подключаем роутер
+# Диспетчер
 dp = Dispatcher()
-dp.include_router(router)
+
+# Подключаем все роутеры
+dp.include_router(main_router)       # Основное меню и команды
+dp.include_router(onboarding_router) # Онбординг
+dp.include_router(training_router)   # Тренировка и мотивация
