@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { FC } from 'react';
 
 import { logoutUser } from '../api';
 
@@ -6,7 +7,7 @@ interface NavbarProps {
   hasToken: boolean;
 }
 
-const Navbar = ({ hasToken }: NavbarProps) => (
+const Navbar: FC<NavbarProps> = ({ hasToken }) => (
   <nav className="bg-white shadow-sm sticky top-0 z-50">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="flex justify-between h-16">
