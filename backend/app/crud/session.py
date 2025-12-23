@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 from typing import List, Optional
@@ -220,11 +218,7 @@ async def finish_session(db: AsyncSession, session: WorkoutSession) -> WorkoutSe
     for s_day in session.session_days:
         await _check_and_update_parent_status(db, s_day)
 
-    now = datetime.utcnow()
-    session.completed_at = now
-    if session.started_at:
-        delta = now - session.started_at.replace(tzinfo=None)
-        session.duration_minutes = int(delta.total_seconds() // 60)
+    session.completed_at = func.now()
     session.status = SessionStatus.COMPLETED
     db.add(session)
     await db.commit()

@@ -3,14 +3,15 @@ import asyncio
 from dotenv import load_dotenv
 import os
 from typing import Optional, Any, Dict
+from config import API_URL  
 
 load_dotenv()
 
-API_URL = os.getenv("API_URL", "http://localhost:8000")
 API_USERNAME = os.getenv("API_USERNAME")
 API_PASSWORD = os.getenv("API_PASSWORD")
 
-USE_FAKE_BACKEND = False  # ⬅︎ Включаем локальный режим. Потом поставишь False.
+USE_FAKE_BACKEND = False  # локальный режим
+
 
 if not API_USERNAME or not API_PASSWORD:
     print("Warning: API_USERNAME or API_PASSWORD not set in .env. Some endpoints require auth.")
@@ -83,7 +84,7 @@ class BackendAPI:
     async def login(self):
         if USE_FAKE_BACKEND:
             return "fake-token"
-
+        
         async with self._token_lock:
             if self._token:
                 return self._token
@@ -99,7 +100,8 @@ class BackendAPI:
                         print("Login failed:", resp.status, await resp.text())
                         return None
                     data = await resp.json()
-                    self._token = data.get("access_token")
+                    print("LOGIN RESPONSE:", data)
+                    self._token = data.get("data", {}).get("access_token")
                     return self._token
             except Exception as e:
                 print("Login exception:", e)
@@ -110,6 +112,21 @@ class BackendAPI:
         if not token:
             return {}
         return {"Authorization": f"Bearer {token}"}
+    
+    async def update_profile(self, profile: dict):
+        """
+        Обновляет профиль пользователя на бэкенде.
+        profile: dict с полями:
+            age, height, weight, fitness_goal, experience_level, workouts_per_week, session_duration
+        """
+        if USE_FAKE_BACKEND:
+            await asyncio.sleep(0.1)
+            return {"status": "ok", "profile": profile}
+
+        s = await self._session_obj()
+        headers = await self._headers()
+        async with s.put(f"{API_URL}/users/me/profile", json=profile, headers=headers) as resp:
+            return await resp.json()
 
     async def get_workout_plan(self):
         if USE_FAKE_BACKEND:
@@ -118,18 +135,33 @@ class BackendAPI:
 
         s = await self._session_obj()
         headers = await self._headers()
+
         async with s.get(f"{API_URL}/workouts/", headers=headers) as resp:
-            return await resp.json()
+            result = await resp.json()
+
+            # 👇 ВАЖНО: возвращаем ТОЛЬКО data
+            if isinstance(result, dict):
+                return result.get("data")
+
+            return None
 
     async def generate_plan(self):
         if USE_FAKE_BACKEND:
-            await asyncio.sleep(0.1)
-            return {"id": _fake_plan["id"]}
+            await asyncio.sleep(0.3)
+            return _fake_plan
 
         s = await self._session_obj()
         headers = await self._headers()
+
         async with s.post(f"{API_URL}/workouts/generate", headers=headers) as resp:
-            return await resp.json()
+            result = await resp.json()
+
+            # 👇 ВАЖНО: возвращаем ТОЛЬКО data
+            if isinstance(result, dict):
+                return result.get("data")
+
+            return None
+
 
     async def start_session(self, workout_plan_id: int, day_index: int):
         if USE_FAKE_BACKEND:

@@ -1,116 +1,164 @@
-# fsm_onboarding.py
 from aiogram import Router, F, types
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from training_manager import user_data  # словарь для хранения активности
-from datetime import datetime, timedelta
+from api import backend  # Ваш клиент бэкенда
 
 router = Router()
 
-# === FSM онбординга ===
+
 class Onboarding(StatesGroup):
     name = State()
     age = State()
     height = State()
     weight = State()
-    goal = State()
+    fitness_goal = State()
+    experience_level = State()
+    workouts_per_week = State()
+    session_duration = State()
 
-# Клавиатура выбора цели
-goal_keyboard = InlineKeyboardMarkup(
+
+# --- Клавиатуры ---
+fitness_goal_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="🔥 Похудеть", callback_data="goal:lose")],
-        [InlineKeyboardButton(text="💪 Набрать массу", callback_data="goal:gain")],
-        [InlineKeyboardButton(text="⚖️ Поддержание формы", callback_data="goal:maintain")],
+        [InlineKeyboardButton(text="🔥 Похудеть", callback_data="fitness_goal:похудение")],
+        [InlineKeyboardButton(text="💪 Набрать массу", callback_data="fitness_goal:набор_массы")],
+        [InlineKeyboardButton(text="⚖️ Поддержание формы", callback_data="fitness_goal:сила")],
     ]
 )
 
-# Клавиатура выбора дня начала тренировки (дни недели)
-week_days = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
-training_day_kb = InlineKeyboardMarkup(
+experience_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text=day, callback_data=f"training_day:{i}") for i, day in enumerate(week_days[:3])],
-        [InlineKeyboardButton(text=day, callback_data=f"training_day:{i}") for i, day in enumerate(week_days[3:6], 3)],
-        [InlineKeyboardButton(text=week_days[6], callback_data=f"training_day:6")]
+        [InlineKeyboardButton(text="Новичок", callback_data="exp:новичок")],
+        [InlineKeyboardButton(text="Средний", callback_data="exp:средний")],
+        [InlineKeyboardButton(text="Продвинутый", callback_data="exp:продвинутый")],
     ]
 )
 
-# === ОБРАБОТКА ===
+
+# === ОБРАБОТЧИКИ ===
 @router.message(F.text == "🧩 Онбординг")
 async def onboarding_start(message: Message, state: FSMContext):
-    user_data[message.from_user.id] = {"last_active": datetime.now(), "training_day": None}
     await state.set_state(Onboarding.name)
     await message.answer("Как вас зовут?")
 
+
 @router.message(Onboarding.name)
 async def onboarding_name(message: Message, state: FSMContext):
-    user_data[message.from_user.id]["last_active"] = datetime.now()
     await state.update_data(name=message.text)
     await state.set_state(Onboarding.age)
     await message.answer("Сколько вам лет?")
 
+
 @router.message(Onboarding.age)
 async def onboarding_age(message: Message, state: FSMContext):
-    user_data[message.from_user.id]["last_active"] = datetime.now()
     if not message.text.isdigit():
         return await message.answer("Введите число!")
     await state.update_data(age=int(message.text))
     await state.set_state(Onboarding.height)
     await message.answer("Введите ваш рост (см):")
 
+
 @router.message(Onboarding.height)
 async def onboarding_height(message: Message, state: FSMContext):
-    user_data[message.from_user.id]["last_active"] = datetime.now()
     if not message.text.isdigit():
         return await message.answer("Введите число!")
     await state.update_data(height=int(message.text))
     await state.set_state(Onboarding.weight)
     await message.answer("Введите ваш вес (кг):")
 
+
 @router.message(Onboarding.weight)
 async def onboarding_weight(message: Message, state: FSMContext):
-    user_data[message.from_user.id]["last_active"] = datetime.now()
     if not message.text.isdigit():
         return await message.answer("Введите число!")
     await state.update_data(weight=int(message.text))
-    await message.answer("🎯 Выберите вашу цель:", reply_markup=goal_keyboard)
+    await state.set_state(Onboarding.fitness_goal)
+    await message.answer("Выберите вашу цель:", reply_markup=fitness_goal_keyboard)
 
-# === CALLBACK ДЛЯ ЦЕЛИ ===
-@router.callback_query(F.data.startswith("goal:"))
+
+@router.callback_query(F.data.startswith("fitness_goal:"))
 async def goal_selected(callback: types.CallbackQuery, state: FSMContext):
-    user_id = callback.from_user.id
-    user_data[user_id]["last_active"] = datetime.now()
-    goal = callback.data.split(":")[1]
-    await state.update_data(goal=goal)
+    fitness_goal = callback.data.split(":")[1]
+    await state.update_data(fitness_goal=fitness_goal)
+    await state.set_state(Onboarding.experience_level)
+    await callback.message.answer("Выберите ваш уровень опыта:", reply_markup=experience_keyboard)
+    await callback.answer()
 
-    # Снимаем состояние онбординга
+
+@router.callback_query(F.data.startswith("exp:"))
+async def experience_selected(callback: types.CallbackQuery, state: FSMContext):
+    exp = callback.data.split(":")[1]
+    await state.update_data(experience_level=exp)
+    await state.set_state(Onboarding.workouts_per_week)
+    await callback.message.answer("Сколько тренировок в неделю вы планируете? Введите число:")
+    await callback.answer()
+
+
+@router.message(Onboarding.workouts_per_week)
+async def workouts_per_week(message: Message, state: FSMContext):
+    if not message.text.isdigit():
+        return await message.answer("Введите число!")
+    await state.update_data(workouts_per_week=int(message.text))
+    await state.set_state(Onboarding.session_duration)
+    await message.answer("Сколько минут длится одна тренировка? Введите число:")
+
+
+@router.message(Onboarding.session_duration)
+async def session_duration(message: Message, state: FSMContext):
+    if not message.text.isdigit():
+        return await message.answer("Введите число!")
+
+    await state.update_data(session_duration=int(message.text))
+    data = await state.get_data()
+
+    profile = {
+        "age": data.get("age"),
+        "height": data.get("height"),
+        "weight": data.get("weight"),
+        "fitness_goal": data.get("fitness_goal"),
+        "experience_level": data.get("experience_level"),
+        "workouts_per_week": data.get("workouts_per_week"),
+        "session_duration": data.get("session_duration")
+    }
+
+    try:
+        # Обновляем профиль пользователя
+        resp = await backend.update_profile(profile)
+        if resp.get("status_code") not in (200, 201):
+            return await message.answer(f"Ошибка обновления профиля: {resp}")
+
+        # ✅ Профиль обновлён, показываем кнопку "Сгенерировать план"
+        generate_plan_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="💪 Сгенерировать план", callback_data="generate_plan")]
+            ]
+        )
+        
+        await message.answer(
+            "✅ Профиль обновлён!\nНажмите кнопку ниже, чтобы сгенерировать тренировочный план:",
+            reply_markup=generate_plan_keyboard
+        )
+
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}")
+
     await state.set_state(None)
-    # Предлагаем выбрать день начала тренировки
-    await callback.message.answer(
-        "Отлично! Теперь выберите, когда начнете тренироваться:",
-        reply_markup=training_day_kb
-    )
-    await callback.answer()
 
-# === CALLBACK ДЛЯ ВЫБОРА ДНЯ НАЧАЛА ТРЕНИРОВКИ ===
-@router.callback_query(F.data.startswith("training_day:"))
-async def training_day_selected(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    day_index = int(callback.data.split(":")[1])
-    today_weekday = datetime.now().weekday()  # 0 = Понедельник
+@router.callback_query(F.data == "generate_plan")
+async def generate_plan_button(callback: types.CallbackQuery):
+    try:
+        plan = await backend.generate_plan()
 
-    # Вычисляем дату следующей выбранной тренировки
-    if day_index >= today_weekday:
-        days_until = day_index - today_weekday
-    else:
-        days_until = 7 - (today_weekday - day_index)
-    training_date = datetime.now() + timedelta(days=days_until)
+        # ✅ УСПЕХ = есть id плана
+        if not plan or "id" not in plan:
+            return await callback.message.answer(
+                f"Ошибка генерации плана: {plan}"
+            )
 
-    user_data[user_id]["training_day"] = training_date
-    user_data[user_id]["last_active"] = datetime.now()
+        await callback.message.answer("✅ План тренировок успешно сгенерирован!")
+        await callback.answer()
 
-    await callback.message.answer(
-        f"Отлично! Тренировка запланирована на {week_days[day_index]}, "
-        f"{training_date.strftime('%d.%m.%Y')} 💪"
-    )
-    await callback.answer()
+    except Exception as e:
+        await callback.message.answer(f"Ошибка: {e}")
+        await callback.answer()
