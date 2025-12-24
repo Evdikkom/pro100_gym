@@ -17,7 +17,7 @@ if not API_USERNAME or not API_PASSWORD:
 
 
 # -------------------------------
-# FAKE DATA FOR LOCAL TESTING (опционально, можно оставить)
+# FAKE DATA FOR LOCAL TESTING
 # -------------------------------
 
 _fake_plan = {
