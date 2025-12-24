@@ -228,29 +228,3 @@ def decline_minutes(n: int):
         return "минут"
 
 
-@router.message(F.text == "⏱ Напоминание")
-async def reminder_start(message: Message):
-    await message.answer("Через сколько минут напомнить?")
-
-
-@router.message(StateFilter(None), lambda m: m.text.isdigit())
-async def reminder_set(message: Message):
-    minutes = int(message.text)
-
-    await message.answer(
-        f"Окей, напомню через {minutes} {decline_minutes(minutes)}!",
-        reply_markup=main_menu
-    )
-
-    # Создаем фоновую задачу для отправки напоминания
-    # Это не блокирует event loop
-    asyncio.create_task(send_reminder(message, minutes))
-
-
-async def send_reminder(message: Message, minutes: int):
-    """
-    Фоновая задача для отправки напоминания.
-    Не блокирует event loop.
-    """
-    await asyncio.sleep(minutes * 60)
-    await message.answer("⏱ Напоминаю! Время тренировки!")
