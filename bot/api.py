@@ -7,13 +7,8 @@ from config import API_BASE_URL
 
 load_dotenv()
 
-API_USERNAME = os.getenv("API_USERNAME")
-API_PASSWORD = os.getenv("API_PASSWORD")
 
 USE_FAKE_BACKEND = False  # локальный режим (можно включить для теста без бэкенда)
-
-if not API_USERNAME or not API_PASSWORD:
-    print("Warning: API_USERNAME or API_PASSWORD not set in .env. Some endpoints require auth.")
 
 
 # -------------------------------
@@ -82,8 +77,7 @@ class BackendAPI:
                 return None
 
     async def _headers(self, telegram_id: Optional[int] = None) -> Dict[str, str]:
-        token = await self.login()
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        headers = {}
         if telegram_id:
             headers["X-Telegram-User-ID"] = str(telegram_id)
         return headers
