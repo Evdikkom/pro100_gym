@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8000';
 
 function getAccessToken(): string | null {
   try {
@@ -496,4 +496,28 @@ export async function fetchStatistics(period = 'all_time'): Promise<StatisticsRe
   }
 
   return await parseJson<StatisticsResponse>(response);
+}
+
+export interface TelegramLinkResponse {
+  telegram_link: string;
+  connect_token: string;
+}
+
+export async function getTelegramLink(): Promise<TelegramLinkResponse> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Not authorized');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/auth/telegram-link`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to get Telegram link');
+  }
+
+  return await parseJson<TelegramLinkResponse>(response);
 }

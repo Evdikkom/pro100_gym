@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import {useEffect, useState, type FC, type JSX} from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 
 import Navbar from './components/Navbar';
@@ -12,6 +12,7 @@ import DashboardLayout from './pages/dashboard/DashboardLayout';
 import DashboardHome from './pages/dashboard/DashboardHome';
 import DashboardWorkout from './pages/dashboard/DashboardWorkout';
 import DashboardStats from './pages/dashboard/DashboardStats';
+import Connect from './pages/Connect';
 
 const getHasToken = () => {
   try {
@@ -31,6 +32,8 @@ const getPageTitle = (pathname: string) => {
       return 'Вход';
     case '/about':
       return 'О нас';
+    case '/connect':
+      return 'Подключение Telegram';
     case '/dashboard':
       return 'Дашборд';
     case '/dashboard/workout':
@@ -44,7 +47,7 @@ const getPageTitle = (pathname: string) => {
   }
 };
 
-const AppShell = () => {
+const AppShell: FC = () => {
   const location = useLocation();
   const [hasToken, setHasToken] = useState(getHasToken);
 
@@ -73,6 +76,7 @@ const AppShell = () => {
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route path="/about" element={<About />} />
+            <Route path="/connect" element={<Connect />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<DashboardHome />} />
@@ -87,7 +91,7 @@ const AppShell = () => {
   );
 };
 
-function App() {
+function App(): JSX.Element {
   return (
     <Router>
       <AppShell />
