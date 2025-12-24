@@ -1,13 +1,33 @@
 import aiohttp
-from aiogram import Router
+import asyncio
+from aiogram import Router, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, StateFilter
 from config import API_BASE_URL
 
 # Хранилище состояний пользователей для онбординга
-user_states = {}  # user_id -> {'state': 'waiting_login' | 'waiting_password', 'login': str}
+user_states = {}  # user_id -> {'state': 'waiting_login' | 'waiting_password' | 'waiting_auth', 'login': str}
 
 router = Router()
+
+# Меню для авторизованных пользователей
+main_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="❓ Помощь")],
+        [KeyboardButton(text="🧩 Онбординг"), KeyboardButton(text="💪 Тренировка")],
+        [KeyboardButton(text="⏱ Напоминание")],
+    ],
+    resize_keyboard=True
+)
+
+# Меню для неавторизованных пользователей
+auth_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🚀 Авторизоваться")],
+    ],
+    resize_keyboard=True,
+    one_time_keyboard=True
+)
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
@@ -21,36 +41,49 @@ async def cmd_start(message: Message):
                     user_data = await response.json()
                     await message.answer(
                         f"🏋️ С возвращением, {user_data.get('username', 'пользователь')}!\n\n"
-                        "Вы уже авторизованы. Используйте /help для просмотра команд."
+                        "Вы уже авторизованы. Используйте меню ниже 👇",
+                        reply_markup=main_menu
                     )
                     return
         except Exception:
             pass  # Игнорируем ошибки, продолжаем с авторизацией
 
     # Начинаем процесс авторизации
-    user_states[user_id] = {'state': 'waiting_login'}
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🚀 Начать авторизацию")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
+    user_states[user_id] = {'state': 'waiting_auth'}
     await message.answer(
         "🏋️ Добро пожаловать в Pro100 Gym!\n\n"
         "Для использования бота нужно авторизоваться.\n"
-        "Нажмите кнопку ниже, чтобы начать:",
-        reply_markup=keyboard
+        "Нажмите кнопку ниже:",
+        reply_markup=auth_menu
     )
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
     await message.answer(
-        "📘 Доступные команды:\n"
-        "/start — начать авторизацию и работу с ботом\n"
-        "/help — показать это сообщение\n\n"
-        "В разработке: сбор параметров, подбор программ и т.д."
+        "📘 Команды:\n"
+        "❓ Помощь\n"
+        "🧩 Онбординг\n"
+        "💪 Тренировка\n"
+        "⏱ Напоминание\n",
+        reply_markup=main_menu
+    )
+
+
+# 🔧 кнопка помощи
+@router.message(F.text == "❓ Помощь")
+async def help_button(message: Message):
+    await cmd_help(message)
+
+
+# === АВТОРИЗАЦИЯ ===
+
+@router.message(F.text == "🚀 Авторизоваться")
+async def start_auth(message: Message):
+    user_id = message.from_user.id
+    user_states[user_id] = {'state': 'waiting_login'}
+
+    await message.answer(
+        "Введите ваше имя пользователя (username) на сайте:"
     )
 
 
@@ -66,19 +99,17 @@ async def handle_text(message: Message):
     user_state = user_states.get(user_id)
 
     if not user_state:
-        # Пользователь не в процессе авторизации
         await message.answer(
             "Используйте /start для начала работы с ботом."
         )
         return
 
-    if user_state['state'] == 'waiting_login':
-        if text == "🚀 Начать авторизацию":
-            await message.answer(
-                "Введите ваше имя пользователя (username) на сайте:"
-            )
-            return
+    if user_state['state'] == 'waiting_auth':
+        if text == "🚀 Авторизоваться":
+            await start_auth(message)
+        return
 
+    if user_state['state'] == 'waiting_login':
         # Сохраняем логин и переходим к вводу пароля
         user_state['login'] = text
         user_state['state'] = 'waiting_password'
@@ -111,15 +142,17 @@ async def handle_text(message: Message):
                             await message.answer(
                                 f"✅ {data.get('message', 'Авторизация успешна!')}\n\n"
                                 "Теперь вы можете использовать все функции бота.\n"
-                                "Используйте /help для просмотра команд."
+                                "Используйте меню ниже 👇",
+                                reply_markup=main_menu
                             )
                             del user_states[user_id]  # Очищаем состояние
                         else:
                             await message.answer(
                                 f"❌ {data.get('message', 'Ошибка авторизации')}\n\n"
-                                "Попробуйте еще раз или используйте /start для перезапуска."
+                                "Попробуйте еще раз:",
+                                reply_markup=auth_menu
                             )
-                            del user_states[user_id]
+                            user_states[user_id] = {'state': 'waiting_auth'}
                     else:
                         await message.answer(
                             "❌ Ошибка сервера. Попробуйте позже."
@@ -129,3 +162,33 @@ async def handle_text(message: Message):
             except Exception as e:
                 await message.answer(f"❌ Ошибка соединения: {str(e)}")
                 del user_states[user_id]
+
+
+# === НАПОМИНАНИЯ ===
+
+def decline_minutes(n: int):
+    if n % 10 == 1 and n % 100 != 11:
+        return "минуту"
+    elif 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        return "минуты"
+    else:
+        return "минут"
+
+
+@router.message(F.text == "⏱ Напоминание")
+async def reminder_start(message: Message):
+    await message.answer("Через сколько минут напомнить?")
+
+
+@router.message(StateFilter(None), lambda m: m.text.isdigit())
+async def reminder_set(message: Message):
+    minutes = int(message.text)
+
+    await message.answer(
+        f"Окей, напомню через {minutes} {decline_minutes(minutes)}!",
+        reply_markup=main_menu
+    )
+
+    await asyncio.sleep(minutes * 60)
+
+    await message.answer("⏱ Напоминаю! Время тренировки!")
