@@ -20,8 +20,6 @@ services:
     build:
       context: ./bot
       dockerfile: Dockerfile
-    env_file:
-    - ./bot/.env
     depends_on:
       db:
         condition: service_healthy
@@ -59,7 +57,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://progym:pro100gym@db:5432/pro_db
     volumes:
       - ./backend:/app
-    command: ["/bin/bash", "/app/entrypoint.sh"]
+    entrypoint: ["/usr/bin/env", "bash", "-lc", "sed -i 's/\r$//' /app/entrypoint.sh && exec /usr/bin/env bash /app/entrypoint.sh"]
     restart: on-failure
 
 volumes:
