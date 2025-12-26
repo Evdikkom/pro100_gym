@@ -3,21 +3,16 @@ import asyncio
 from dotenv import load_dotenv
 import os
 from typing import Optional, Any, Dict
-from config import API_URL  
+from config import API_BASE_URL  
 
 load_dotenv()
 
-API_USERNAME = os.getenv("API_USERNAME")
-API_PASSWORD = os.getenv("API_PASSWORD")
 
 USE_FAKE_BACKEND = False  # локальный режим (можно включить для теста без бэкенда)
 
-if not API_USERNAME or not API_PASSWORD:
-    print("Warning: API_USERNAME or API_PASSWORD not set in .env. Some endpoints require auth.")
-
 
 # -------------------------------
-# FAKE DATA FOR LOCAL TESTING (опционально, можно оставить)
+# FAKE DATA FOR LOCAL TESTING
 # -------------------------------
 
 _fake_plan = {
@@ -66,7 +61,7 @@ class BackendAPI:
             s = await self._session_obj()
             try:
                 async with s.post(
-                    f"{API_URL}/auth/login",
+                    f"{API_BASE_URL}/auth/login",
                     data={"username": API_USERNAME, "password": API_PASSWORD},
                     timeout=10
                 ) as resp:
@@ -81,37 +76,39 @@ class BackendAPI:
                 print("Login exception:", e)
                 return None
 
-    async def _headers(self) -> Dict[str, str]:
-        token = await self.login()
-        return {"Authorization": f"Bearer {token}"} if token else {}
+    async def _headers(self, telegram_id: Optional[int] = None) -> Dict[str, str]:
+        headers = {}
+        if telegram_id:
+            headers["X-Telegram-User-ID"] = str(telegram_id)
+        return headers
 
     # Убрал старый update_profile — теперь используем прямой PATCH в fsm_onboarding.py
 
-    async def get_workout_plan(self):
+    async def get_workout_plan(self, telegram_id: Optional[int] = None):
         if USE_FAKE_BACKEND:
             await asyncio.sleep(0.1)
             return _fake_plan
 
         s = await self._session_obj()
-        headers = await self._headers()
-        async with s.get(f"{API_URL}/workouts/", headers=headers) as resp:
+        headers = await self._headers(telegram_id=telegram_id)
+        async with s.get(f"{API_BASE_URL}/workouts/", headers=headers) as resp:
             result = await resp.json()
             return result.get("data") if isinstance(result, dict) else None
 
-    async def generate_plan(self):
+    async def generate_plan(self, telegram_id: Optional[int] = None):
         if USE_FAKE_BACKEND:
             await asyncio.sleep(0.3)
             return _fake_plan
 
         s = await self._session_obj()
-        headers = await self._headers()
-        async with s.post(f"{API_URL}/workouts/generate", headers=headers) as resp:
+        headers = await self._headers(telegram_id=telegram_id)
+        async with s.post(f"{API_BASE_URL}/workouts/generate", headers=headers) as resp:
             result = await resp.json()
             return result.get("data") if isinstance(result, dict) else None
 
     # остальные методы (start_session, complete_set и т.д.) оставил без изменений — они работают
 
-    async def start_session(self, workout_plan_id: int, day_index: int):
+    async def start_session(self, workout_plan_id: int, day_index: int, telegram_id: Optional[int] = None):
         if USE_FAKE_BACKEND:
             global _fake_active_session
             await asyncio.sleep(0.1)
@@ -119,41 +116,41 @@ class BackendAPI:
             return _fake_active_session
 
         s = await self._session_obj()
-        headers = await self._headers()
+        headers = await self._headers(telegram_id=telegram_id)
         payload = {"workout_plan_id": workout_plan_id, "day_index": day_index}
-        async with s.post(f"{API_URL}/sessions/start", headers=headers, json=payload) as resp:
+        async with s.post(f"{API_BASE_URL}/sessions/start", headers=headers, json=payload) as resp:
             return await resp.json()
 
-    async def get_active_session(self):
+    async def get_active_session(self, telegram_id: Optional[int] = None):
         if USE_FAKE_BACKEND:
             await asyncio.sleep(0.1)
             return _fake_active_session
 
         s = await self._session_obj()
-        headers = await self._headers()
-        async with s.get(f"{API_URL}/sessions/active", headers=headers) as resp:
+        headers = await self._headers(telegram_id=telegram_id)
+        async with s.get(f"{API_BASE_URL}/sessions/active", headers=headers) as resp:
             return await resp.json()
 
-    async def complete_set(self, set_id: int, reps_done: int, weight_lifted: float = 0.0):
+    async def complete_set(self, set_id: int, reps_done: int, weight_lifted: float = 0.0, telegram_id: Optional[int] = None):
         if USE_FAKE_BACKEND:
             return {"status": "ok"}
 
         s = await self._session_obj()
-        headers = await self._headers()
+        headers = await self._headers(telegram_id=telegram_id)
         async with s.post(
-            f"{API_URL}/sessions/sets/{set_id}/complete",
+            f"{API_BASE_URL}/sessions/sets/{set_id}/complete",
             headers=headers,
             json={"reps_done": reps_done, "weight_lifted": weight_lifted}
         ) as resp:
             return await resp.json()
 
-    async def skip_set(self, set_id: int):
+    async def skip_set(self, set_id: int, telegram_id: Optional[int] = None):
         if USE_FAKE_BACKEND:
             return {"status": "ok"}
 
         s = await self._session_obj()
-        headers = await self._headers()
-        async with s.post(f"{API_URL}/sessions/sets/{set_id}/skip", headers=headers) as resp:
+        headers = await self._headers(telegram_id=telegram_id)
+        async with s.post(f"{API_BASE_URL}/sessions/sets/{set_id}/skip", headers=headers) as resp:
             return await resp.json()
 
 

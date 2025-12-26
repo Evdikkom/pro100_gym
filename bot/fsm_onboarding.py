@@ -3,7 +3,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from api import backend
-from config import API_URL  # Добавляем импорт API_URL
+from config import API_BASE_URL
 
 router = Router()
 
@@ -126,8 +126,8 @@ async def session_duration(message: Message, state: FSMContext):
     try:
         # Используем существующий эндпоинт PATCH /users/me
         s = await backend._session_obj()
-        headers = await backend._headers()
-        async with s.patch(f"{API_URL}/users/me", json=profile, headers=headers) as resp:
+        headers = await backend._headers(telegram_id=message.from_user.id)
+        async with s.patch(f"{API_BASE_URL}/users/me", json=profile, headers=headers) as resp:
             result = await resp.json()
 
         if resp.status >= 400:
@@ -153,7 +153,7 @@ async def session_duration(message: Message, state: FSMContext):
 @router.callback_query(F.data == "generate_plan")
 async def generate_plan_button(callback: types.CallbackQuery):
     try:
-        plan = await backend.generate_plan()
+        plan = await backend.generate_plan(telegram_id=callback.from_user.id)
 
         if not plan or "id" not in plan:
             return await callback.message.answer(f"Ошибка генерации плана: {plan}")

@@ -1,5 +1,7 @@
 from aiogram import Router, F, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.context import FSMContext
 from api import backend
 from datetime import datetime, timedelta
 from typing import Dict, Any
@@ -7,6 +9,26 @@ import asyncio
 import random
 
 router = Router()
+
+class CompleteSet(StatesGroup):
+    waiting_reps = State()
+    waiting_weight = State()
+
+def format_set_text(pending_set: Dict[str, Any]) -> str:
+    """Форматирует текст для сета, включая вес."""
+    reps_min = pending_set.get('plan_reps_min') or pending_set.get('target_reps', '')
+    reps_max = pending_set.get('plan_reps_max')
+    reps_text = f"{reps_min}"
+    if reps_max and reps_max != reps_min:
+        reps_text += f"-{reps_max}"
+    reps_text += " повторов"
+
+    weight = pending_set.get('plan_weight')
+    if weight:
+        reps_text += f" x {weight} кг"
+
+    return reps_text
+
 
 # ----------------------------
 # Активные сессии пользователей
@@ -109,7 +131,7 @@ async def training_menu(message: Message):
     update_user_activity(user_id)
 
     # Сначала проверяем, есть ли активная сессия
-    session_resp = await backend.get_active_session()
+    session_resp = await backend.get_active_session(telegram_id=user_id)
     session = session_resp.get("data") if isinstance(session_resp, dict) else None
 
     if session:
@@ -122,12 +144,7 @@ async def training_menu(message: Message):
 
             exercise_name = pending_ex.get("plan_exercise_name") or pending_ex.get("name") or "Упражнение"
 
-            reps_min = pending_set.get('plan_reps_min') or pending_set.get('target_reps', '')
-            reps_max = pending_set.get('plan_reps_max')
-            reps_text = f"{reps_min}"
-            if reps_max and reps_max != reps_min:
-                reps_text += f"-{reps_max}"
-            reps_text += " повторов"
+            reps_text = format_set_text(pending_set)
 
             text = (
                 f"✅ Продолжаем вашу тренировку!\n"
@@ -140,7 +157,7 @@ async def training_menu(message: Message):
             return
 
     # Нет активной сессии — показываем план
-    plan = await backend.get_workout_plan()
+    plan = await backend.get_workout_plan(telegram_id=user_id)
 
     if not isinstance(plan, dict) or not plan.get("id"):
         text = "У вас пока нет тренировочного плана. Пройдите онбординг или сгенерируйте план."
@@ -168,7 +185,7 @@ async def cb_generate_plan(callback: types.CallbackQuery):
     update_user_activity(user_id)
     await callback.answer()
 
-    plan = await backend.generate_plan()
+    plan = await backend.generate_plan(telegram_id=user_id)
     if not isinstance(plan, dict) or not plan.get("id"):
         return await callback.message.answer(f"Ошибка генерации плана: {plan}")
 
@@ -190,7 +207,7 @@ async def cb_start_day(callback: types.CallbackQuery):
         return await callback.message.answer("Неверный день.")
 
     # Проверяем активную сессию
-    active_resp = await backend.get_active_session()
+    active_resp = await backend.get_active_session(telegram_id=user_id)
     active_data = active_resp.get("data") if isinstance(active_resp, dict) else None
 
     if active_data:
@@ -201,12 +218,7 @@ async def cb_start_day(callback: types.CallbackQuery):
                 day_title = active_data["session_days"][0].get("title", day_title)
 
             exercise_name = first_ex.get("plan_exercise_name") or first_ex.get("name") or "Упражнение"
-            reps_min = first_set.get('plan_reps_min') or first_set.get('target_reps', '')
-            reps_max = first_set.get('plan_reps_max')
-            reps_text = f"{reps_min}"
-            if reps_max and reps_max != reps_min:
-                reps_text += f"-{reps_max}"
-            reps_text += " повторов"
+            reps_text = format_set_text(first_set)
 
             text = (
                 f"У вас уже есть активная тренировка!\n"
@@ -222,14 +234,14 @@ async def cb_start_day(callback: types.CallbackQuery):
             active_sessions.pop(user_id, None)
 
     # Нет активной — стартуем новую
-    plan = await backend.get_workout_plan()
+    plan = await backend.get_workout_plan(telegram_id=user_id)
     if not plan or "id" not in plan:
         return await callback.message.answer("Нет плана. Сгенерируйте новый.")
 
     if day_index >= len(plan.get("days", [])):
         return await callback.message.answer("Неверный день.")
 
-    session_resp = await backend.start_session(plan["id"], day_index)
+    session_resp = await backend.start_session(plan["id"], day_index, telegram_id=user_id)
     if isinstance(session_resp, dict) and session_resp.get("status_code") == 400:
         error_msg = session_resp.get("error", "Неизвестная ошибка")
         return await callback.message.answer(f"Не удалось начать тренировку:\n{error_msg}")
@@ -253,12 +265,7 @@ async def cb_start_day(callback: types.CallbackQuery):
         return await callback.message.answer("В этом дне нет упражнений.")
 
     exercise_name = first_ex.get("plan_exercise_name") or first_ex.get("name") or "Упражнение"
-    reps_min = first_set.get('plan_reps_min') or first_set.get('target_reps', '')
-    reps_max = first_set.get('plan_reps_max')
-    reps_text = f"{reps_min}"
-    if reps_max and reps_max != reps_min:
-        reps_text += f"-{reps_max}"
-    reps_text += " повторов"
+    reps_text = format_set_text(first_set)
 
     text = (
         f"🔥 Начали тренировку!\n"
@@ -293,7 +300,7 @@ def find_pending_set(session: Dict[str, Any]):
 # Завершение сета
 # ----------------------------
 @router.callback_query(F.data.startswith("tb_complete:"))
-async def cb_complete_set(callback: types.CallbackQuery):
+async def cb_complete_set(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     update_user_activity(user_id)
     await callback.answer()
@@ -304,19 +311,47 @@ async def cb_complete_set(callback: types.CallbackQuery):
     except Exception:
         return await callback.message.answer("Неверный сет.")
 
-    try:
-        await backend.complete_set(set_id, reps_done=0, weight_lifted=0.0)
-    except Exception as e:
-        return await callback.message.answer(f"Ошибка: {e}")
+    await state.update_data(set_id=set_id)
+    await state.set_state(CompleteSet.waiting_reps)
+    await callback.message.answer("Введите количество повторений:")
 
-    session_resp = await backend.get_active_session()
+
+@router.message(CompleteSet.waiting_reps)
+async def process_reps(message: Message, state: FSMContext):
+    if not message.text.isdigit():
+        return await message.answer("Введите число!")
+
+    await state.update_data(reps_done=int(message.text))
+    await state.set_state(CompleteSet.waiting_weight)
+    await message.answer("Введите вес (в кг):")
+
+
+@router.message(CompleteSet.waiting_weight)
+async def process_weight(message: Message, state: FSMContext):
+    if not message.text.isdigit() and not message.text.replace('.', '', 1).isdigit():
+        return await message.answer("Введите число (например, 10 или 12.5)!")
+
+    weight_lifted = float(message.text)
+    user_data = await state.get_data()
+    set_id = user_data.get("set_id")
+    reps_done = user_data.get("reps_done")
+    user_id = message.from_user.id
+
+    try:
+        await backend.complete_set(set_id, reps_done=reps_done, weight_lifted=weight_lifted, telegram_id=user_id)
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}")
+        return await state.clear()
+
+    await state.clear()
+
+    session_resp = await backend.get_active_session(telegram_id=user_id)
     session = session_resp.get("data") if isinstance(session_resp, dict) else None
 
     if not session or (not session.get("session_days") and not session.get("exercises")):
         active_sessions.pop(user_id, None)
-        await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.message.answer(f"🎉 Тренировка завершена! {random.choice(MOTIVATION)}")
-        await callback.message.answer("Выберите день для следующей тренировки:", reply_markup=make_weekday_kb())
+        await message.answer(f"🎉 Тренировка завершена! {random.choice(MOTIVATION)}")
+        await message.answer("Выберите день для следующей тренировки:", reply_markup=make_weekday_kb())
         return
 
     active_sessions[user_id] = session
@@ -324,9 +359,8 @@ async def cb_complete_set(callback: types.CallbackQuery):
     next_set, next_ex = find_pending_set(session)
     if not next_set:
         active_sessions.pop(user_id, None)
-        await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.message.answer(f"🎉 Тренировка завершена! {random.choice(MOTIVATION)}")
-        await callback.message.answer("Выберите день для следующей тренировки:", reply_markup=make_weekday_kb())
+        await message.answer(f"🎉 Тренировка завершена! {random.choice(MOTIVATION)}")
+        await message.answer("Выберите день для следующей тренировки:", reply_markup=make_weekday_kb())
         return
 
     day_title = "Тренировка"
@@ -334,20 +368,14 @@ async def cb_complete_set(callback: types.CallbackQuery):
         day_title = session["session_days"][0].get("title", day_title)
 
     exercise_name = next_ex.get("plan_exercise_name") or next_ex.get("name") or "Упражнение"
-    reps_min = next_set.get('plan_reps_min') or next_set.get('target_reps', '')
-    reps_max = next_set.get('plan_reps_max')
-    reps_text = f"{reps_min}"
-    if reps_max and reps_max != reps_min:
-        reps_text += f"-{reps_max}"
-    reps_text += " повторов"
+    reps_text = format_set_text(next_set)
 
     text = (
         f"Следующий: <b>{exercise_name}</b>\n"
         f"Сет: {reps_text}\n\n"
         f"{random.choice(MOTIVATION)}"
     )
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer(text, reply_markup=make_kb_for_set(next_set["id"]))
+    await message.answer(text, reply_markup=make_kb_for_set(next_set["id"]))
 
 # ----------------------------
 # Пропуск сета
@@ -365,11 +393,11 @@ async def cb_skip_set(callback: types.CallbackQuery):
         return await callback.message.answer("Неверный сет.")
 
     try:
-        await backend.skip_set(set_id)
+        await backend.skip_set(set_id, telegram_id=user_id)
     except Exception as e:
         return await callback.message.answer(f"Ошибка: {e}")
 
-    session_resp = await backend.get_active_session()
+    session_resp = await backend.get_active_session(telegram_id=user_id)
     session = session_resp.get("data") if isinstance(session_resp, dict) else None
 
     if not session or (not session.get("session_days") and not session.get("exercises")):
@@ -390,12 +418,7 @@ async def cb_skip_set(callback: types.CallbackQuery):
         return
 
     exercise_name = next_ex.get("plan_exercise_name") or next_ex.get("name") or "Упражнение"
-    reps_min = next_set.get('plan_reps_min') or next_set.get('target_reps', '')
-    reps_max = next_set.get('plan_reps_max')
-    reps_text = f"{reps_min}"
-    if reps_max and reps_max != reps_min:
-        reps_text += f"-{reps_max}"
-    reps_text += " повторов"
+    reps_text = format_set_text(next_set)
 
     text = (
         f"Следующий: <b>{exercise_name}</b>\n"
